@@ -1,0 +1,16 @@
+Built with SAS/C 6.3
+--------------------
+
+sieve:
+sc sieve.c link opt opttime
+
+sieve_dbg:
+sc sieve.c link dbg=f
+
+
+Built with i686-aros-gcc
+Downloaded from zerohero.se
+---------------------------
+
+sieve_aros:
+i686-aros-gcc -o sieve_aros -O2 sieve.c

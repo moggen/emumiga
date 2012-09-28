@@ -1,0 +1,98 @@
+Build instructions for building with Linux
+------------------------------------------
+
+These instructions are for building a linux-hosted AROS and to
+build Emumiga within this source tree. The Emumiga binaries generated
+by this build process will run under a native AROS too (like Icaros) as
+long as it is a 32bit AROS.
+It should be possible to compile and use Emumiga for a 64bit target systems.
+It should also be possible to build Emumiga with AROS, but that is untested.
+Yet another possibilty is to build with a cross-compiler targetted for
+AROS. You will have to make your own Makefiles as the normal build uses
+the MMake system.
+
+If you try any other means of building Emumiga, please report your experiences
+to the forum on emumiga.com, the forums at aros-exec.org, or send me a mail
+to moggen@emumiga.com
+
+
+Requirements:
+A Linux system with GCC, Make and automake tools. X11 configured.
+You alse need NetPBM, Bison, Flex and the X11 development kits.
+For AROS to work in X11 you need to enable use of backing store.
+('Option "Backingstore"' under section "Device" in xorg.conf)
+
+Download the latest AROS source bundle
+It can be found on http://aros.sourceforge.net/download.php
+
+Unpack the archive and enter AROS source directory, configure and build.
+(Adapt the parameters to your preferences)
+
+> ./configure --with-resolution=1024x768x24 --enable-debug=all
+> make
+
+This will take quite some time, about an hour or more if you have an older
+computer.
+
+Create the directory 'local' and put this directory/checkout into it.
+
+Build emumiga
+
+> cd local/emumiga
+> make -C ../.. emumiga
+> make -C ../.. emumiga-frontend
+
+Once this build has run you can use quicker versions in case you want to
+recompile emumiga:
+
+> make -C ../.. emumiga-quick
+> make -C ../.. emumiga-frontend-quick
+
+The emumiga build will create emumiga.library in the Libs directory
+(../../bin/linux-i386/AROS/Libs/).
+The emumiga-frontend creates the front end binaries used to start 68k
+AmigaOS programs with. These are the programs created:
+
+  emumigarun  - The main runner program, takes the 68k binary as argument
+                and any other argument will be passed as arguments to the
+                68k program.
+
+  readlog     - Outputs the debug log to the stdout. Terminate with ctrl-c
+
+  emumigastop - Stops all emulation. This is not working quite yet.
+
+  dump_mmap   - Lists all memory maps currently used to the debug log
+
+An Amiga M68k test binary can be found in directory c-amigaos
+The helloworld_dbg is a simple hello world compiled with SAS/C with full
+debug info included (symbols are supported by emumiga)
+This binary must be copied to the output directory for it to be reachable
+within the AROS instance:
+> cp c-amigaos/helloworld_dbg ../../bin/linux-i386/AROS/local/emumiga/frontend/
+
+Running a terminal in X11, start AROS:
+
+> cd ../../bin/linux-i386/AROS/
+> boot/AROSBootstrap
+
+Inside AROS:
+
+For debug output (optional), start up a shell prompt and run:
+
+> cd local/emumiga/frontend
+> readlog
+
+To run Emumiga with the test binary, start up a shell prompt and run:
+
+> cd local/emumiga/frontend
+> emumigarun helloworld_dbg
+
+
+A tip if the arrow keys and the Windows/Amiga keys does not work:
+Newer X.Org graphical systems use a new driver for input devices called 
+"evdev". This driver produces different raw keycodes in X compared to
+legacy XFree86 systems. But there is an alternative keymap in AROS
+that works. Run these commands in Linux and (re)start AROS:
+
+> cd bin/linux-i386/AROS/Devs/Keymaps/X11
+> mv keycode2rawkey-alt.table keycode2rawkey.table

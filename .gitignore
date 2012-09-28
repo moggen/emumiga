@@ -1,0 +1,5 @@
+/.bzr
+*~
+mmakefile
+distribute/*.tar.gz
+TAGS

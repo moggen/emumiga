@@ -1,0 +1,81 @@
+68k_i_1.c
+----------
+i_add_ax		ADD, ADDA, ADDX
+i_addi			ADDI
+i_addq			ADDQ
+i_sub_ax		SUB, SUBA, SUBX
+i_subi			SUBI
+i_subq			SUBQ
+i_neg_x			NEG, NEGX
+
+68k_i_2.c
+----------
+i_mul			MULU, MULS
+i_mull			MULU_L, MULS_L
+i_div			DIVU, DIVS
+i_divl			DIVUL, DIVSL, DIVU_L, DIVS_L
+
+
+68k_i_3.c
+----------
+i_and_abcd_exg		AND, ABCD, EXG
+i_andi			ANDI, ANDI_CCR, ANDI_SR
+i_or_sbcd_pack		OR, SBCD, PACK, UNPK
+i_ori			ORI, ORI_CCR, ORI_SR
+i_eor_cmpm		EOR, CMPM
+i_eori			EORI, EORI_CCR, EORI_SR
+i_not			NOT
+
+68k_i_4.c
+----------
+i_move			MOVE, MOVEA
+i_move_sr_ccr		MOVE_f_SR, MOVE_t_SR, MOVE_f_CCR, MOVE_t_CCR
+i_movem_ext		MOVEM, EXT
+i_moveq			MOVEQ
+i_moves			MOVES
+
+68k_i_5.c
+----------
+i_sh_r			ASR, LSR, ROR, ROXR, ASL, LSL, ROL, ROXL
+i_sh_m			ASR_M, LSR_M, ROR_M, ROXR_M, ASL_M, LSL_M,
+			ROL_M, ROXL_M
+
+68k_i_6.c
+----------
+i_jsr_jmp		JSR, JMP
+i_bra_bsr		BRA, BSR
+i_bcc			Bcc
+i_db_trap_s_cc		DBcc, TRAPcc, Scc
+i_callm_rtm		CALLM, RTM
+
+68k_i_7.c
+----------
+i_bop_movep		BTST, BCHG, BCLR, BSET, MOVEP
+i_bopi			BTST_I, BCHG_I, BCLR_I, BSET_I
+i_bfop			BFTST, BFEXTU, BFCHG, BFEXTS, BFCLR, BFFFO,
+			BFSET, BFINS
+
+68k_i_8.c
+----------
+i_cmp_a			CMP, CMPA
+i_cmpi			CMPI
+i_chk			CHK
+i_cas_cas2		CAS, CAS2
+i_cmp2_chk2		CMP2, CHK2
+i_tst			TST
+i_tas			TAS
+
+68k_i_9.c
+----------
+i_lea_extb		LEA, EXTB
+i_clr			CLR
+i_misc			TRAP, LINK, UNLK, MOVE_USP, RESET, NOP, STOP,
+			RTE, RTD, RTS, TRAPV, RTR, MOVEC
+i_nbcd_linkl		NBCD, LINK_L
+i_swap_bpkt_pea		SWAP, BPKT, PEA
+
+68k_i_10.c
+----------
+i_illegal
+i_line_a
+i_line_f

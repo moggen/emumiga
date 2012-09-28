@@ -1,0 +1,7 @@
+git
+automake
+bison
+flex
+netpbm
+libx11-dev
+gcc-multilib

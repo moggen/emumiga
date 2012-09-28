@@ -1,0 +1,22 @@
+Most of the source code in this project is dually licensed under the AROS
+public license version 1.1 (or later) and the GNU Lesser General Public License
+version 2.1 or later. See the preambles of each file for specific details.
+
+The full text of the AROS Public License version 1.1 can be
+found in the file: LICENSE.APL
+
+The full text of the GNU Lesser General Public License version 2.1 can be
+found in the file: LICENSE.LGPL
+
+
+A few specific files in this project are public domain.
+These files are listed here:
+
+frontend/*     (all files)
+asm-m68k/amiga_hello_world.s
+asm-m68k/Makefile
+asm-m68k/README
+emumiga.conf
+Makefile
+mmakefile.src
+README

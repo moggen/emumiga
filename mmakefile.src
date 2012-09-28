@@ -1,0 +1,133 @@
+#
+# mmakefile.src - Main MMake file
+#
+# This file is Public Domain
+#
+
+# Full build with all depenancies built:
+#   make -C ../.. emumiga
+# 
+# Quick build if full build has been done before:
+#   make -C ../.. emumiga-quick
+#
+# Cleanup
+#   make -C ../.. emumiga-clean
+
+include $(TOP)/config/make.cfg
+
+MEMFILES := virtual_space virtual_mapping user_mapping real_space vmap_list virtual_object \
+	 vobj_list rom_mapping sys_mapping robj_list internal_module
+
+CPUFILES := cpu68k/cpu68k cpu68k/68k_lut cpu68k/68k_1 cpu68k/68k_2 cpu68k/68k_3 \
+	cpu68k/68k_4 cpu68k/68k_5 cpu68k/68k_6 cpu68k/68k_7 cpu68k/68k_8 \
+	cpu68k/68k_9 cpu68k/68k_10 cpu68k/68k_help
+ 
+COREFILES := emumiga emulator context context_collection message log module_registry \
+	scheduler module library_mapping utility object_type object_type_registry \
+        symbol
+
+FILES_EXEC := modules/exec/main modules/exec/zeropage modules/exec/execbase \
+	modules/exec/s_ExecBase modules/exec/f_library
+
+FILES_DOS := modules/dos/main modules/dos/dosbase modules/dos/s_DosLibrary \
+	modules/dos/f_loadseg modules/dos/s_FileHandle modules/dos/f_stdio \
+        modules/dos/s_Process
+
+FILES_INTUITION := 
+
+FILES_GRAPHICS := 
+
+FILES_UTILITY :=
+
+FILES_GADTOOLS :=
+
+FILES_ICON := 
+
+FILES_LAYERS := 
+
+FILES_LOCALE := 
+
+FILES_TIMER := 
+
+FILES_AUDIO := 
+
+FILES := $(FILES_EXEC) $(FILES_DOS) $(FILES_INTUITION) \
+	$(FILES_GRAPHICS) $(FILES_UTILITY) $(FILES_GADTOOLS) \
+	$(FILES_ICON) $(FILES_LAYERS) $(FILES_LOCALE) $(FILES_TIMER) \
+	$(FILES_AUDIO)
+
+C_FILES :=
+#CXX_FILES := $(MMUFILES) $(CPUFILES) $(COREFILES) $(FILES)
+CXX_FILES := $(COREFILES) $(CPUFILES) $(MEMFILES) $(FILES)
+
+# Make object file paths
+C_OBJS := $(addprefix $(GENDIR)/$(CURDIR)/, $(addsuffix .o, $(subst /,___,$(C_FILES)) ) )
+CXX_OBJS := $(addprefix $(GENDIR)/$(CURDIR)/, $(addsuffix .o, $(subst /,___,$(CXX_FILES)) ) )
+
+# C Flags to the compiler
+CFLAGS := -g
+
+# C++ Flags to the compiler. RTTI and exceptions must be disabled
+# to remove dependancy on libstdc++
+CXX_FLAGS := -W -Wall -Wno-long-long -fbounds-check -DDEBUGLEVEL=6 -g -O2 \
+	-fno-rtti -fno-exceptions
+
+# Compiler paths
+C_CC = $(TOOLDIR)/crosstools/$(AROS_TARGET_CPU)-aros-gcc
+CXX_CC = $(TOOLDIR)/crosstools/$(AROS_TARGET_CPU)-aros-g++
+
+# Dependancies
+C_DEPS := $(patsubst %.o,%.d,$(C_OBJS))
+CXX_DEPS := $(patsubst %.o,%.d,$(CXX_OBJS))
+
+$(C_DEPS):
+	@echo Makedepend $(patsubst %.d,%.c,$(subst ___,/,$(notdir $@)))...
+	@$(C_CC) $(C_FLAGS) -MM -MT $(patsubst %.d,%.o,$@) -o $@ $(patsubst %.d,%.c,$(subst ___,/,$(notdir $@)))
+	@echo $@: $(patsubst %.d,%.c,$(subst ___,/,$(notdir $@))) >>$@
+
+$(CXX_DEPS):
+	@echo Makedepend $(patsubst %.d,%.cpp,$(subst ___,/,$(notdir $@)))...
+	@$(CXX_CC) $(CXX_FLAGS) -MM -MT $(patsubst %.d,%.o,$@) -o $@ $(patsubst %.d,%.cpp,$(subst ___,/,$(notdir $@)))
+	@echo $@: $(patsubst %.d,%.cpp,$(subst ___,/,$(notdir $@))) >>$@
+
+-include $(C_DEPS) $(CXX_DEPS)
+
+# Compilation C
+$(C_OBJS):
+%compile_q \
+        cmd=$(C_CC) \
+        opt=$(C_FLAGS) \
+        from="$(patsubst %.o,%.c,$(subst ___,/,$(notdir $@)))" \
+        to=$@
+
+# Compilation C++
+$(CXX_OBJS):
+%compile_q \
+        cmd=$(CXX_CC) \
+        opt=$(CXX_FLAGS) \
+        from="$(patsubst %.o,%.cpp,$(subst ___,/,$(notdir $@)))" \
+        to=$@
+
+# Use our own dependancies for the library
+emumiga-library: $(C_DEPS) $(CXX_DEPS) $(C_OBJS) $(CXX_OBJS)
+
+# A small trick to get %build_module to include our compiled objects
+LDFLAGS := $(C_OBJS) $(CXX_OBJS)
+
+# Normally this macro compiles the files, but we want to include
+# our own compiled C and C++ objects. The files pararameter is set
+# to empty to disable compilation. To include our own objects we
+# use the LDFLAG trick above.
+%build_module mmake=emumiga-library \
+        modname=emumiga \
+        modtype=library \
+	files="" \
+        uselibs=rom
+
+#MM- emumiga: emumiga-library-clean emumiga-library
+
+#MM- emumiga-quick: emumiga-library-clean emumiga-library-quick
+
+#MM emumiga-clean: emumiga-library-clean
+emumiga-clean:
+	@rm -f $(GENDIR)/$(CURDIR)/*.o $(GENDIR)/$(CURDIR)/*.d *~

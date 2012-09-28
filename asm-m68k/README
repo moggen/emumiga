@@ -1,0 +1,7 @@
+To build the items in this directory you need binutils compiled
+for m68k AmigaOS.
+
+Precompiled ready-to-use packages for cross compiling via Linux can be
+downloaded from: http://www.zerohero.se/cross/os3.html
+
+With Zeroheros binutils properly installed you can simply run: make

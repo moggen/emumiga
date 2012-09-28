@@ -1,0 +1,278 @@
+Emumiga internals
+=================
+
+Main ideas
+----------
+
+Emumiga is an emulation layer for running Amiga 68k programs on AROS.
+It is unlike UAE in the way that it is not emulating the whole Amiga
+hardware.  Emumiga only emulates the Motorola MC68000 (68k) processor
+and uses bridging mechanisms to intercept calls to system libraries,
+devices and other handlers.  It also intercepts accesses to the system
+structures in the memory.
+
+Emumiga translates system calls and relays them directly to the
+corresponding AROS syscall.  Memory accesses are also translated as
+68k is using big endian memory access pattern, whereas the typical
+AROS is compiled and running on little endian systems like Intel or
+AMD.
+
+As memory pointers may differ in endian, and possibly in length with a
+64 bit AROS, Emumiga is remapping AROS memory addresses in its own
+virtual 68k memory space.  Emumiga do work on big endian system as
+well, and with both 32 and 64 bit architectures.
+
+Unlike UAE, Emumiga does not intend to be 100% compatible with Amiga.
+Demos and games often use direct hardware programming, and that is not
+working with Emumiga.  Emumiga has the goal to run as many so called
+system-friendly applications as possible.
+
+But of course, if we could get our hands on the source code for our
+old favourite apps, we would not need to emulate. Open source FTW.
+
+
+An introduction of how things work
+----------------------------------
+
+An AROS program that wants to run an Amiga application opens up the
+emumiga.library and invokes the run() function with arguments pointing
+out the executable file etc.
+
+The first time the emumiga.library is loaded, it initializes its
+structures and creates a dedicated DOS process for the emulation that
+runs in the background.  When the calling AROS process is invoking
+run(), the run()-function sends a message to the emulator process to
+run the Amiga binary.
+
+The emulator process waits until it gets a message and proceeds by
+loading the binary, setting up a context for the emulation, allocating
+stack space and put the command arguments in register A0 and D0.  It
+then starts emulating the instructions of the loaded program.
+
+The emulator process can run multiple emulated 68k programs at the
+same time using time slicing. This makes it possible for emulated
+programs to spawn their own new processes and to share data between
+these processes. Mulitple AROS processes invoking the run() function
+will also run their emulations in the same global emulator process.
+
+All system-friendly applications will read memory address 4 to get the
+pointer to the exec.library structure.  Emumiga has emulated
+structures in its virtual memory for all supported libraries, devices
+and handlers.  The virtual address 4 therefore contains the address to
+the simulated exec.library.  The application then typically uses
+exec.library to open up other libraries and resources.  System calls
+are made through vectors stored right before the library structure in
+memory.  Emumiga sets up so a special emulation trap instruction will
+be executed when such a vector is called.  This instruction is not a
+real 68k instruction but is handled by the cpu emulator code to
+signal that special handling is reqired.
+
+All system calls through libraries and devices are intercepted and
+special adaptor code is run to convert the arguments to something that
+AROS can use.  This code also keeps track of pointers sent to and
+received from a syscall.
+
+If a pointer to a system structure is sent via a syscall, it is put in
+one of the registers as argument when the call is made.  Emumiga knows
+what structure it is as it is specified in the API what this argument
+is.  Emumiga creates a mirror object in AROS memory to hold the
+corresponding real AROS structure, and converts all data from the
+virtual memory to the real struct.
+
+After this, the real AROS syscall is made with the AROS mirror struct
+as argument.
+
+However, this real system call is not made by the emulator process
+itself.  It will send a message back to the invoking AROS process with
+all arguments needed so that this process makes the system call.  This
+must be done, as many syscalls will block or uses variables and
+properties on the process that is calling it.  It should always appear
+to be the original caller process making these calls and not the
+emulator process.
+
+In the meantime, the emulation of this 68k process is halted.  When
+the real syscall has returned, the caller process sends a message back
+to the emulator again so it can resume the emulation.
+
+Any pointers returned will be processed similar to the input
+arguments.  Virtual memory is created mirroring the AROS structure, so
+the 68k application can access it.
+
+The procedure of setting upp mirrors between virtual memory and the
+AROS memory seems really easy to do, but it requires a lot of logic to
+make it running and there are many pitfalls.
+
+For simple data structures it is quite easy, as the only concern is to
+convert between endian formats.  Structures with pointers requires
+more work, as the structures pointed out must also be mirrored.  The
+pointer in the virtual memory structure must be a valid virtual memory
+address, and in the AROS structure it must be a valid AROS memory
+address.
+
+Add to this that structures may contain other substructures and/or
+itself be part of a bigger structure, that some pointers has the type
+APTR or "void *" so we don't know what is pointed out, that structures
+can be declared as local variables in C and thus get put in stack
+memory, that memory will be unallocated or reused as something else...
+
+Emumiga tries its best to cope with these complex scenarios, but it is
+probably not even possible to get a 100% percent compatible emulation.
+Luckily, system friendly applications are often written in ways that
+are pretty easy to emulate.
+
+
+An overview of the source code
+------------------------------
+
+Emumiga was initially written in C, but the author decided to convert
+all to C++ to use the benefits of object orientation.  Only the good
+stuff (ok, this is very subjective) is used so the dark arts of
+multiple inheritance, template metaprogramming, slicing, exceptions,
+streams, operator overloading and use of run-time type information
+(RTTI) is avoided.  Another factor limiting the use of exceptions and
+RTTI is that the cross compiler in the AROS build environment lacks
+the stdc++ library.  Special care is also needed because Emumiga is
+made as a library, and libraries must use a subset of the standard C
+library.
+
+The object oriented model consists of these classes:
+
+class emulator 
+
+    The main object controlling the emulator.  Is responsible for
+    setting upp the emulator process, keeping track of emulation
+    contexts, handling the message passing from the user process to
+    the emulator process and to tie together the virtual memory
+    system. The emulator class is responsible for invoking the
+    emulation of 68k instructions.
+
+class context
+
+    Encapsulates everything that is needed to emulate a single 68k
+    process.  It includes a cpu68k object.  The context object is
+    referenced in the messages passed between the user process and the
+    emulator process.
+
+class context_collection
+
+    A container for context objects.  Used by the emulator class.
+
+class cpu68k
+
+    Encapsulates the cpu registers and the actual 68k cpu emulation.
+    It also contains information from the special emulator hook
+    instruction and can do disassembly output for logging purposes.
+
+class message
+
+    Handles the message sent between user processes and the emulator
+    process.  Uses AROS struct Message and the Exec MsgPort API as the
+    underlying transport.
+
+class scheduler
+
+    Handles scheduling of emulation contexts. Keeps a ready queue for
+    currently running emulations and a wait queue for contexts that
+    are sent to the user process and is currently doing a syscall.
+
+class hook
+
+    Used by library and device adapters to create callbacks for
+    handling syscalls.  Every syscall has three stages.  Stage 1 is
+    run by the emulator process and is used to prepare the arguments,
+    create needed mappings etc.  Stage 2 is run by the user process
+    and is doing the AROS syscall.  Stage 3 is done when the context
+    returns to the emulator again for handling the return value.
+
+class hook_registry
+
+    Used by the emulator class to manage hook objects.  Every library
+    and device adapter that needs syscall handling must register their
+    hook object.  A unique ID is returned that is used to form the
+    special emulator trap instruction.
+
+class virtual_space
+
+    Handles the whole 32 bit virtual memory.  Manages all virtual
+    mappings through the vmap_list class.
+
+class vmap_list
+
+    A list class for objects of the class virtual_mapping.  Virtual
+    mappings may not overlap in this list.
+
+class virtual_mapping
+
+    An abstract class handling a specific block of virtual
+    memory.  Virtual mappings can contain virtual objects.
+
+class user_mapping
+
+    Inherits from virtual_mapping.  Is used for "user" memory.  The
+    68k application code and data segments, all memory blocks
+    allocated by the emulated application and the stack.  It is the
+    normal memory areas that the application will use.  User memory
+    can be used in system calls as system structures, and in these
+    cases virtual objects are used to handle these parts of the
+    virtual mapping.
+
+class sys_mapping
+
+    Inherits from virtual_mapping.  Is used for new objects returned
+    from a syscall.  As they are not part of the user allocated memory
+    they can be treated different.  Always contains a virtual object
+    covering the entire mapping.
+
+class virtual_object
+
+    An abstract base class for system structures in virtual memory.
+    All emulated system structures have a class that inherits from
+    this one.  System structures often contain substructures and the
+    substructure will have its own virtual object.  Virtual objects
+    can in these cases overlap each other.  Virtual objects are often
+    tied to instances of class real_object, forming a pair that binds
+    together the virtual struct and the real AROS struct.
+
+class real_object
+
+    Tracks system structures in real AROS memory.  A lightweight
+    object that points out the real AROS structure and having a
+    reference to the corresponding virtual_object.  The reason for
+    having this is to keep track of all known real structures so we
+    won't make duplicates if the same pointer is returned again by
+    some other syscall etc.
+
+class real_space
+
+    Like virtual_space, but for real AROS memory.  Used to index all
+    instances of real_object.
+
+class log
+
+    Handles debug messages and keeps a log buffer
+
+
+The above classes are implemented in files with the same names as the
+classes except for the cpu68k class that has its own directory
+containing the 68k emulation code split into several files.
+
+Every system structure that can be used with Emumiga has its own class
+inheriting from the class virtual_object.  It is up to each
+structure's handling code to deal with memory reads and writes, to
+keep track of linked object and to handle creation and destruction of
+the object.  The source code tree contains subdirectories for every
+library and device with code that implement these classes and the
+particular logic needed to emulate them.  Each of these subdirectories
+also contain code for setting up and register syscall hooks with the
+emulator and to create a virtual memory block with the library/device
+base structure along with all the syscall vectors with the emulation
+trap instructions.
+
+The library specification file emumiga.conf and the file emumiga.cpp
+binds all together as an AROS library. The library init function sets
+up the emulator process and initializes all subsystems.  The file also
+contains the function calls of the library and some glue code needed
+to implement the memory management for the C++ operator "new" and
+"delete".
+
+--test--

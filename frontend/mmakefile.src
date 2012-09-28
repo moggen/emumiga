@@ -1,0 +1,13 @@
+#
+# mmakefile.src - Main MMake file
+#
+# Public Domain
+#
+
+include $(TOP)/config/make.cfg
+
+FRONTPRGS := emumigarun emumigastop readlog writelog dump_mmap emumigarunwb
+
+%build_progs mmake=emumiga-frontend \
+        files="$(FRONTPRGS)" \
+        uselibs=emumiga

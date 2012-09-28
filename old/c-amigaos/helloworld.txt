@@ -1,0 +1,8 @@
+Built with SAS/C 6.3
+--------------------
+
+helloworld:
+sc helloworld.c link
+
+helloworld_dbg:
+sc helloworld.c link dbg=f

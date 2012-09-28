@@ -1,0 +1,48 @@
+To build with debugging:
+
+Edit mmakefile.src
+
+Add or update in CFLAGS:
+-DDEBUGLEVEL=5
+
+make -C ../.. emumiga-clean
+make -C ../.. emumiga-quick
+
+
+Debug levels:
+
+0	No debug
+	Display only fatal errors
+	Fail if function parameters is of the wrong type
+	Fail on attempt of freeing partial memory block
+	Fail if user data spans multiple mappings
+
+1	Nomal, important warnings
+	Warn if unimplemented stubs are called
+
+2	Notices, less important warnings
+	Warn if user allocated resources are not freed upon exit
+
+3	Informative messages, high level
+	Inform on init and cleanup of modules
+
+4	Informative messages, mid level
+	Inform on init and cleanup of simulated structures
+	Inform about library calls
+
+5	Informative messages, low level
+	Internal debug output
+	Creation and destruction of memory mappings
+	CPU run-time messages
+	Details about library calls including mapped pointers
+
+6	Disassemble
+	Debug output from instruction block emulation
+
+7	Disassemble
+	Debug memory references
+
+8	Disassemble
+	Debug memory references
+	Show register dumps
+
