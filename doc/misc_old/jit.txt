@@ -1,0 +1,124 @@
+Ideas about a JIT compiler
+
+Main focus will be on IA32 host platform.
+
+
+Every 68k instruction can be transformed into a block of native code.
+These blocks of codes are put together to a chunk of 68k code.
+A chunk of code is run as one big atomic operation.
+Execution of a JIT compiled chunk of code must be identical with the same
+code interpreted.
+A chunk represents exactly one consecutive sequence of 68k instructions.
+A chunk can only be entered at the first corresponding 68k instruction.
+A chunk can be exited by several instructions within itself.
+A chunk is analyzed and a mask is created for CCR flag dependancies.
+This mask should point out the flags that are used as input by the chunk
+and the flags that can be untouched by any exit point. (the inverse of this
+mask is the flags that are not used for input but guaranteed to be
+destroyed by the chunk regardless of exit point)
+An exit from a chunk into another chunk can be optimized so it ignores
+to calculate CCR flags that is not used by the target chunk.
+All optimized exit points should also have a mask that specifies what
+flags are ignored.
+If an exit is to interpreted code, all flags must be set up correctly.
+Program flow breaking instructions ends a chunk if the target address is
+variable.
+Fixed jumps or relative branches pointing forward can be a part of a chunk
+if the target is within the chunk.
+Backwards pointing relative branches or fixed jumps are always exit points
+(to set a fixed limit of the number of instructions that is simulated by an 
+execution of the chunk)
+Chunks can not overlap
+If interpreted code or the JIT compilation of another chunk determines
+jumps or calls into a chunk and not to the first instruction, then that
+target chunk must be invalided.
+Reads of 68k binary data that is represented by the chunk is ok, writes
+must invalidate the chunk.
+Special care must be taken if a write is made to the own chunk, i.e.
+self-modifying code
+Chunks should have an upper limit in size to avoid waste of resources if it
+gets invalidated, and to make an upper limit of execution time.
+A chunk with a CCR flag optimized exit that points to a chunk that gets
+destroyed should also be destroyed.
+Intra-chunk optimizations is allowed within certain limits.
+Exit points within chunks must be barriers in the optimizations.
+Support for page faults require all memory accesses to be exit points, and
+forces all memory accesses to be the start of a chunk because of reexecution
+of faulting instructions.
+Idea: Loop unrolling for small constant number loops. Might optimize speed
+but a greater benefit is to avoid chunk split due to the backwards jump.
+Idea: Peephole optimization of target code
+Idea: Peephole optimization of source code for arranging optimal sequence
+Idea: Common subexpression optimization
+Identification of registers, structure offsets or stack offsets that can
+be analyzed for constant values. Identified constants can be included
+in special optimized chunks. Test instructions must precede the compiled
+chunk to invalidate it if the constants are changed.
+Code segments can have a mirror memory used for instruction statistics.
+Statistics is counted for all jumps to interpreted code. The instruction
+that is the target of any jump will get the statistic counter increased.
+A low priority background process can analyze the statistics and create
+new compiled chunks
+
+
+Register plan for emumiga JIT native code:
+
+eax
+ebx
+ecx	pointer to cpu structure
+edx
+esi
+edi
+ebp
+esp
+eflags
+
+Calling convention is fastcall. pointer to cpu structure is passed in ECX and
+return value must be put in EAX. Registers EBX, ESI, EDI, EBP must be
+preserved.
+
+
+Example instruction
+
+68k:
+	add.l	d0,d1
+
+
+x86:
+	movl	offset_d0(ecx),eax
+	addl	eax,offset_d1(ecx)
+
+	movw	#0,ax
+	seto	dl
+	setc	dh
+	setc	al		; C
+	rorw	#1,ax
+	movb	dl,al		; V
+	rorw	#1,ax
+	setz	al		; Z
+	rorw	#1,ax
+	sets	al		; N
+	rorw	#1,ax
+	moveb	dh,al		; X
+	rolw	#4,ax
+	andw	#$FFE0,offset_sr(ecx)
+	orw	ax,offset_sr(ecx)
+
+
+Flag calculations with optional flags
+
+	movw	#0,ax
++V	seto	dl
++X	setc	dh
++C	setc	al		; C
++C	rorw	#1,ax
++V	movb	dl,al		; V
+	rorw	#1,ax
++Z	setz	al		; Z
+	rorw	#1,ax
++N	sets	al		; N
+	rorw	#1,ax
++X	moveb	dh,al		; X
+	rolw	#4,ax
+	andw	#$FFE0,offset_sr(ecx)
+	orw	ax,offset_sr(ecx)

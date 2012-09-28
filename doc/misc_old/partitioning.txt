@@ -1,0 +1,75 @@
+Partitioning of the emulator
+----------------------------
+
+3 parts:
+
+1) The 68k emulator
+
+2) Endian remapping
+
+3) AmigaOS emulation
+
+
+The 68k emulator part is always present.
+The endian remapping part is only needed for little endian hosts.
+The AmigaOS emulation part is used if the host os is not AmigaOS/AROS
+
+Example scenarios:
+
+Linux on x86: 68k emulator + Endian remapping + AmigaOS emulation
+Linux on PPC: 68k emulator + AmigaOS emulation
+AROS on x86: 68k emulator + Endian remapping
+AROS on PPC: 68k emulator
+
+
+PROBLEMS
+
+Keeping track of pointers that can be used as callbacks INTO the emulator.
+- An array of function pointers created compile-time with an alloc
+  function.
+
+Idea:
+Blocking operations against AROS/AmigaOS emulation layer should be set up
+in emulated space as message passing like dospackets. This serializes any
+external multitasking interfaces.
+Problem/Unwanted: MsgPort operations must be handled by the emulator layer
+if Aros is the back end platform.
+
+Problem: If a blocking operation to Aros results in a callback from Aros
+into emulated space. What process/stack should be used for the callback?
+Is it ok to always use the same as the caller? Must these kinds of
+call/callback combos be tracked? And how should the calling state be 
+saved and set into consisteny during the callback? Is there a problem here?
+
+PART 1 - THE EMULATOR
+
+68k emulation, always present
+
+API against the world:
+Emulator trap functions,
+MMU mapping entries,
+Bank of call-in routines
+
+
+PART 2 - ENDIAN REMAPPING
+
+Remapping is used for little-endian target.
+Uses underlying MMU remapping.
+Supplies functions for CPU emulation to access memory.
+
+A big-endian target does not need to set up MMU mappings and the CPU helper
+functions are just wrappers.
+
+
+PART 3 - AMIGA OS INTERFACE
+
+Has 2 modes.
+
+1) AmigaOS mapper. Usable when target is Aros little-endian.
+   Remaps Aros structures as AmigaOS binary format.
+   Keeps track of the interface between emulated space and native space.
+
+2) AmigaOS simulation. Supplies system object mappings and operating system
+   call entries.
+   All possible callbacks are made by the simulation so there is no need to
+   keep track of calls from and to emulated space.

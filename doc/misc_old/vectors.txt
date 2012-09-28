@@ -1,0 +1,21 @@
+Emulator hook vectors
+=====================
+
+This is a list of the parameters to the special emulator hook instruction.
+The parameters consists of 2 parts, a module number and a function number.
+
+
+Module	Module description	Function numbers with descriptions
+------- ----------------------- -----------------------------------------
+0	Run-time module		0 - End current process
+				1 - Failure to load bootstrap
+				2 - Failure to load executable file
+
+1	Debug module		0 - Dump all registers
+				1 - Print 32 bit value in D7
+				2 - Print 16 bit value in D7
+				3 - Print 8 bit value in D7
+				4 - Print string pointed by D7
+
+100	exec.library		<library vector call number>
+101	dos.library		<library vector call number>

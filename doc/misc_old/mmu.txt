@@ -1,0 +1,90 @@
+MMU
+===
+
+The idea:
+To build a system that can translate from 68k virtual emulated address space
+to real host memory in a very generic way.
+
+Goals:
+*   The MMU should be able to map virtual amiga memory to emulator host memory
+    in a 1:1 fashion, making pointers to data directly transferrable.
+*   The MMU should be able to remap linear adress segments to arbitrary host
+    adresses. Pointers must be taken care of and remapped.
+*   Enabling endian mapping of known structures.
+*   Enabling non-linear mapping of memory, converting or simulating any
+    structure.
+*   Enabling custom memory management with call-back functions, making it
+    possible to partly simulate structures or to emulate memory mapped I/O
+    hardware.
+*   Memory mappings should have byte resolution and allow as little as one
+    byte in a mapping entry, and not be forced to be aligned in any way.
+*   The virtual memory system should allow many mappings, as many as hundreds
+    and still maintain performance.
+*   Virtual mappings must be modifiable during run-time emulation. Adding,
+    changing, deleting.
+*   A default mapping is to be used for virtual addresses not matched by a
+    specific entry.
+*   Errors detected by the mapping logic or by custom call-back functions 
+    should be able to propagate to the emulator.
+*   Emulator core code should be able to access the virtual memory in 
+    arbitrary sizes, even if that means utilizing several mapping entries.
+
+Implementation
+--------------
+
+Ideas:
+Using a customized b-tree to index the mappings. The b-tree is not wasting 
+memory like hash tables or binary trees and the index tree can be adjusted to
+be perfectly aligned and sized to fit cache-lines.
+
+An entry should contain the following:
+- Start address
+- Length in bytes
+- Reference to mapping function for reading
+- Same for writing
+- An optional native pointer
+- Custom argument to the mapping functions
+
+The mapping functions are invoked with these parameters:
+- Virtual address of the start of the mapping (the key)
+- Offset from the start of the mapping where the operation should begin.
+- Size of the data in bytes for this operation. The MMU central logic
+  guarentees that the size fits within the mapping.
+- Pointer to memory area that should be filled with data when reading, or 
+  containing the data to be written. This buffer is treated as an array
+  of bytes and must be at least the operation size in length.
+- Optional native pointer. Can be used to point out the corresponding real
+  memory area or object.
+- Custom argument
+
+All the different mappings can be implemented as functions.
+
+- 1-1 mapping
+    Trivial. The operation takes the start of the mapping + the offset and 
+    casts that value as a *byte. Then it copies between the buffer and that
+    pointer. Native pointer and custom argument is not used.
+
+- Linear memory remapping
+    The native pointer contains the real host address of the beginning of the
+    mapped segment. Native pointer + offset makes the *byte used in the copy.
+
+- Endian mapping
+    Uses 1-1 mapping or linear remapping with the real base address as native
+    pointer. The custom argument is used to point out a byte-reordering scheme.
+    The scheme contains one entry per byte in the mapping. The entry contains
+    the byte offset of the byte in the host real memory that correspond to
+    this virtual offset.
+
+- Non-linear mapping
+    Like endian mapping, but the scheme used is allowed to have free form.
+    Every virtual address has an entry in the scheme, but it does not have to
+    be the inverse. This allows reordering of fields and skipping pieces of
+    data in the real memory, and even mappings where real memory positions are
+    mapped from several virtual addresses.
+
+- Custom mapping
+    The most general mapping. Custom functions are used for the mapping
+    allowing the user to build any kind of mapping. It is also possible to
+    do conversions of data and to emulate memory mapped IO etc. The native
+    pointer and the custom argument in the entry may be used in any suitable
+    way.

@@ -1,0 +1,363 @@
+Object oriented Emumiga
+=======================
+
+Emulator objects:
+CPU, MMU Entry, Host, Emulation context
+
+Emulated amiga objects:
+Library bases, library vectors, library call gateways,
+System structures
+
+General good OOP design:
+Dependancy Injection if possible, otherwise factory pattern.
+Avoid "new" in backend code.
+Programming against abstractions.
+No multiple inheritance except inheritance of pure abstract classes
+(interfaces)
+No use of stream operator (portability)
+Abstraction of language/framework specific containers
+(stl::Vector, java.ArrayList etc)
+Abstraction of interface to AROS
+No cut n' paste of code, put in mother class or move to helper method/class.
+No massive select/case, use strategy pattern.
+
+
+
+Scenarios for memory mappings
+=============================
+
+1)
+                                   struct
+          vmem                    |------|
+      |-----------|     =>     |-----------|
+
+  vmem address is used as a struct. Argument to a syscall or if the address
+  is put into an existing struct or if the address is already present in
+  another vmem space that is converted into a struct.
+
+2)
+                           struct
+      [struct]     =>     |------|
+
+  An unmapped AROS structure is returned from a syscall or if an unknown
+  pointer is read from an existing struct.
+
+3)
+                           vmem
+      (alloc)     =>     |------|
+
+  A new vmem allocation. Can be as a read-only variant.
+
+4)
+                              vmem
+      [real mem]     =>     |------|
+
+  A general data memory area is returned from a syscall or retrieved through a
+  pointer in an existing structure. Examples: A buffer or a string. Exists in
+  a read-only variant for strings and similar.
+
+5)
+                                     superstruct
+           struct                   |-----------|
+          |------|                    |------|
+      |--------------|     =>     |--------------|
+           vmem
+
+  A struct inside vmem is used as a superstruct through a syscall or a pointer
+  (both vmem and real). Should be avoided if possible. We should always try
+  to determine if a struct is a part of a larger structure when doing a
+  mapping.
+
+6)
+                           superstruct
+       struct             |-----------|
+      |------|     =>       |------|
+
+  A struct based on real memory is used as a superstruct through syscall or
+  a pointer. We should try to avoid this happening at any time by analyzing
+  all structs so we can detect if they are part of a bigger object.
+  Problem: As this scenario increases the vmem block it risks colliding with
+  other mappings put before and/or after it. Arrays of objects could lead to
+  this kind of collision too. Idea: Always use margins between vmem blocks
+  created from real structs to allow some expansions. Idea: Intelligent
+  margins tuned to every type of struct. Idea: Command line configuration of
+  the standard margins used. Idea: Robot code that traverses the system
+  objects looking for arrays. It is triggered when mapping known problematic
+  mappings.
+
+7)
+       struct
+      |------|     =>       X
+
+  A struct created from a real pointer is destroyed via a destructive syscall.
+
+8)
+           struct
+          |------|
+      |--------------|     =>     X
+           vmem
+
+  A chunk of vmem is freed and contained mappings are destroyed.
+
+9)
+                                       struct
+                                      |------|
+      ...-----------|     =>     ...-----------|
+            stack
+
+  An adress pointing into the stack is used as a structure via syscall or is
+  put into an existing struct.
+
+10)
+            struct
+           |------|                        X
+      ...-----------|     =>     ...--|
+            stack
+
+  A mapping within the stack is freed when the stack frame is released.
+
+11)
+          vmem
+      |-----------|     =>     X
+
+  A vmem block is freed
+
+12)
+                                vmem
+        vmem                  |------|        
+      |------|     =>     |------|            !!!
+
+  Vmem overlapping is not allowed!
+
+13)
+                               struct
+       struct                 |------|        
+      |------|     =>     |------|            !!!
+
+  Real memory struct overlapping is not allowed!
+
+14)
+                                         struct
+          struct                        |------|        
+         |------|                    |------|
+      |--------------|     =>     |--------------|      !!!
+           vmem
+
+  Vmem based struct overlapping is not allowed!
+
+15)
+                                        struct
+          vmem                         |------|
+      |-----------|     =>     |-----------|         !!!
+
+  Structs can't be partially within vmem
+
+16)
+                               substruct
+        struct                  |----|
+      |--------|     =>       |--------|      !!!
+
+  Incompatible substructs can not exist
+
+17)
+                                       superstruct
+           struct                   |---------------|
+          |------|                    |------|
+      |--------------|     =>     |--------------|        !!!
+           vmem
+
+  Conversion of a vmem struct into a superstruct fails if the superstruct
+  won't fit in the underlying vmem block.
+
+
+
+
+Classes
+-------
+
+Virtual memory
+	Handles the global virtual memory space
+	Singleton
+	Contains virtual mappings
+	Handles addition and removal of virtual mappings
+	Has a read behavior
+	Has a write behavior
+
+Virtual mapping
+	A memory range in virtual address space
+	Has a read behavior
+	Has a write behavior
+	Can contain virtual objects
+	May be observed by one or more cpus
+
+Virtual object
+	An emulated AmigaOS object
+	Can be tied to one virtual mapping
+	Can be tied to a real object
+	Can have subobjects
+	Has a read behavior
+	Has a write behavior
+
+Real memory
+	Keeps track of real memory space occupied by real objects
+	Singleton
+
+Real object
+	An AROS system structure instance
+	Is registered in Real memory
+
+Read behavior
+	Handles reads of virtual memory
+
+Write behavior
+	Handles writes of virtual memory
+
+Real thread
+	An AROS task/process
+
+Emulation thread
+	Keeps the state of the emulation context
+	Handles interaction with the real thread
+	Contains a cpu emulation
+
+Cpu emulation
+	Encapsulates a cpu emulation
+	Contains the cpu state
+	Handles emulation of cpu instructions
+	Observes the current virtual mapping that instructions are fetched
+	from
+
+VRange
+	A pair containing a virtual memory address and a length
+
+VRangeMap<T>
+	An ordered map containing non-overlapping VRanges
+	The key is a VRange and the value is of type T
+
+VRangeMap<T>Iterator
+	An iterator object for a VRangeList<T>
+
+RRange
+	A pair containing a real memory address and a length
+
+RRangeMap<T>
+	An ordered map containing non-overlapping RRanges
+	The key is a RRange and the value is of type T
+
+RRangeMap<T>Iterator
+	An iterator object for a RRangeList<T>
+
+
+----
+
+namespace emumiga {
+
+class virtual_space
+	int add_mapping(virtual_mapping *mapping);
+	int rem_mapping(virtual_mapping *mapping);
+	virtual_mapping *find_mapping(uint32_t address);
+	int read(uint32_t address, uint32_t len, uint8_t *buffer);
+	int write(uint32_t address, uint32_t len, uint8_t *buffer);
+	symbol *get_symbol(uint32_t address);
+
+class virtual_mapping
+	int type;
+	uint32_t *start;
+	uint32_t length;
+	int *add_object(virtual_object *object);
+	int *rem_object(virtual_object *object);
+	virtual_object *find_object(uint32_t address, int type);
+	int read(uint32_t offset, uint32_t len, uint8_t *buffer);
+	int write(uint32_t offset, uint32_t len, uint8_t *buffer);
+	symbol *get_symbol(uint32_t address);
+	int add_symbol(symbol *symbol);
+	int rem_symbol(symbol *symbol);
+
+class user_mapping : virtual_mapping
+class sys_mapping : virtual_mapping
+class rom_mapping : virtual_mapping
+
+class virtual_object
+	int type;
+	uint32_t *start;
+	uint32_t length;
+	virtual_mapping *mapping;
+	real_object *robj;
+	int read(uint32_t offset, uint32_t len, uint8_t *buffer);
+	int write(uint32_t offset, uint32_t len, uint8_t *buffer);
+	symbol *get_symbol(uint32_t address);
+
+class real_space
+	int add_object(real_object *object);
+	int rem_object(real_object *object);
+	real_object *find_object(void *address);
+
+class real_object
+	void *start;
+	int length;
+	int type;
+	virtual_object *vobj;
+
+class read_behavior
+	int read(uint32_t offset, uint32_t len, uint8_t *buffer);
+
+class write_behavior
+	int write(uint32_t offset, uint32_t len, uint8_t *buffer);
+
+class symbol
+	uint32_t address;
+	char text[MAX_SYMBOL];
+
+class context_collection
+	add(context *ctx);
+	rem(context *ctx);
+	find(context *ctx);
+	findByTask(struct Task *task);
+
+class emulator
+	context_collection contexts;
+	struct Process *task;
+	struct MsgPort *port;
+	static emulator *getEmulator();
+	context *getContext();
+	context *getContextByTask(struct Process *task);
+	sendMsg(message *msg);
+	int doEvents();
+
+class context
+	enum {TO_NATIVE, NATIVE, TO_EMULATE, EMULATE} mode;
+	struct Process *proc;
+	struct MsgPort *port;
+	cpu cpu;
+	emulator *emulator;
+	message *default_msg;
+
+	sendToEmulation(int);
+	sendToNative(int)
+
+class message {
+	struct Message aros_msg;
+	enum {RUNCMD, RUNEXIT, SYSCALL, SYSRETURN, SHUTDOWN} cmd;
+	context *ctx;
+	message *fromAros(struct Message *m);
+	struct Message *toAros();
+}
+
+
+class cpu
+	int run_instruction();
+
+class vlist<T>
+	int add(T *item);
+	int rem(T *item);
+	T *find(uint32_t vaddr);
+	T *findNearest(uint32_t vaddr);
+//	int iterate(vlist<T>_iterator &iterator);
+//	clear();
+
+class vlist<T>_iterator
+	T *current();
+	int next();
+	int prev();
+	int rem();
+}

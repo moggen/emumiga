@@ -1,0 +1,277 @@
+AmigaOS Objects
+---------------
+
+An AmigaOS object can be created in two different ways:
+1) By the operating system
+2) By the user application
+
+The objects created by the operating system are owned by the operating
+system and the virtual memory range can not be used for other things by
+the application.
+Operation system objects may be restricted in which fields that can be
+read from or written to by the application.
+These objects are also type immutable, the memory range can not be
+converted in to other types.
+
+Application objects are set up from the allocation's own virtual memory
+or on the stack. The virtual memory range for the object is the whole or
+a part of a larger virtual memory block of an unspecified type.
+The application object is created when a system call is made that takes
+a reference to a specific object, and that reference is unknown.
+Application objects can also be created if another AmigaOS structure
+gets updated by the application, and the field involved is a reference to
+an object.
+A third possibility for object creation is if a previous known object gets
+used as another type. For example if a Library object is needed, but a
+mapping is previously set up for just the Node header of the Library. In
+this case a Library object must be set up replacing/extending the Node
+object (and any other smaller parts that is covered by the new object).
+
+When an application object is initialized, a special memory mapping range
+is created overlaying the below virtual memory range.
+The initialization will parse the contents of the memory to set up the
+internal states of the object. As the memory is still belonging to the 
+application it should be possible to at least read the contents of the
+whole virtual memory after it is objectified. The data read should be
+the same as the underlying data as long as the object is not updated.
+There is of course possibilities that the undelying data is not valid as
+an object of the specific type, and that must be handled in some way.
+
+A system object has a specific lifespan, it is well known most times when
+such an object dies and then it can be freed by the operating system.
+An application object on the other hand is created from an application 
+virtual memory block and many times it can't be certain when an object
+dies. The contents may still be valid and active but nothing can be assumed
+of the application behavior. It might never be used again, or it might
+be reused as it is, or it might be reused for other purposes.
+As long as there is a chance that the object is reused as it is, it should
+not be destroyed.
+Destruction should occur explicitly when:
+- The object is a part of allocated virtual memory and that memory is
+  freed.
+- An object is created from stack virtual memory and the stack pointer is
+  restored past or into the range of the object.
+- The memory range or parts of it is to be objectified as an incompatible
+  type.
+- A system call is used that disconnects or invalidates the object in such
+  a way that it should not be used in its current state.
+
+Multi-layered mappings
+----------------------
+
+To enable application objects we must be able to create overlay mappings
+on top of the existing application virtual memory mapping ranges.
+
+Layered mappings are also needed for polymorphism and composite objects.
+Most AmigaOS structures contains other primitive structures like Lists and
+Nodes. Those specific components and their virtual memory ranges should
+have overlaying mappings as the specific objects. It is ok in AmigaOS to
+handle a Library object as a Node object when it is to be inserted into
+a List for example. The Library object has a Node component in the start
+of the structure.
+The other way around is also needed. When traversing a list containing
+libraries, Nodes will be seen as parts of the list. But a node is really
+just a part of the rest of the object, so the Node reference is also a
+Library reference in this case.
+The layering should be strictly ordered to make a clear dependancy chain.
+The top layer for an adress gets the handling of that memory location.
+The lowest layer is the application memory and the stack, this layer is
+handling the trivial binary memory access operations where there is no
+other layers defined above.
+The largest object should be the topmost layer. Subcomponents of a large
+object has its own mappings below, and subcomponents of the subcomponents
+should be below that.
+This makes the smallest objects simplest, they are only extending raw
+application memory or stack. Larger composite object layers overshadow
+the subparts and can intercept and overrule the smaller parts' behaviors, 
+or it might just delegate to the subpart layer if no special handling is
+required.
+This ordering makes it possible to introduce new composite objects without
+the need to change any code in the subparts, but the drawback is of course
+that changes in existing small objects might break larger ones.
+
+Simulation layout of typical objects
+------------------------------------
+A system object emulation is described in a c-file and a corresponding header
+file with declarations and definitions.
+These functions exists:
+
+static map_r():
+	Read function for mmu entry, uses cached data if available,
+	or possibly terminate on an unimplemented field. Parts of the object
+	can be lazily created upon reading in this function. Reads of
+	overshadowed sub-objects can be overridden here or must be delegated
+	to the sub-object's mmu entry read function.
+
+static map_w():
+	Write function for mmu entry. Triggers consistency checks. Writes
+	to overshadowed sub-objects can be overridden or delegated.
+
+static getObj():
+	Allocate/get a free unused object. The object structure is initialized
+	with all zeros.
+
+static releaseObj():
+	Frees an object. Deallocates or might be reused later.
+
+OBJECT_init():
+	Gets run once on emulator setup.
+
+OBJECT_cleanup():
+	Gets run once on a normal emulator exit.
+
+OBJECT_get():
+	Returns a pointer to an existing object or sets up a new object with
+	default settings, or converts application memory into an object.
+	Responsible for allocating the object, setting up the mmu entry, 
+	allocate virual memory range if needed, to analyze and handle any
+	overshadowed sub-objects and to parse application memory if needed.
+
+OBJECT_release():
+	Releases an object. Deletes the mmu entry which in turn call the
+	destructor. Cleanup logic should be put in the MMU destructor.
+
+static destructor():
+	MMU entry destructor. Deallocates and frees an existing object or
+	restore application memory if the object was created from that.
+	Releases any contained sub-objects and virtual memory range.
+	It is called when an object should be removed.  Causes for this is
+	an explicit release with OBJECT_release() or in the cases that the
+	object was created from application memory it can be freeing of the
+	memory, reuse of memory for other purposes or when a stack frame
+	object goes out of scope.
+
+OBJECT_find():
+	Returns the object pointer for an object that starts on a specified
+	virtual address.
+
+
+AROS Multiprocess support
+-------------------------
+
+To enable full process functionality for AROS real AROS processes need to be
+created by CreateProc() and CreateProcNew(). For everything to work
+at a general level all calls out from emulation space need to be from the
+real process' execution context.
+
+To make things really simple the whole emulation process is implemented as a
+library. A native AROS process that wants to run emulation of a 68k code block
+will open the library, run initializations setting up the context and then
+call the code via library calls.
+A special convenience method can be used for loading an Amiga 68k binary and
+run it through a simple call.
+
+The library will ensure that the emulation engine is loaded exactly once and
+is shared for all users. The library will also have the benefit of being
+loaded on demand, a thing that a daemon-like construction will not have.
+If all execution is finished and all code and data in emulated space is not
+referred by external references, the emulation can terminate and expunge the
+library from memory.
+
+When the emulator engine is initializing it should spawn a special emulation
+process that does the actual cpu emulation. Communication between library
+users and the emulation engine should be via message IPC. Access to supporting
+systems like the virtual memory allocation must be serialized via semaphores.
+
+
+Flows, ":" is waiting state
+
+
+    Emumiga main	       Emulation		Created
+       process			process			process
+----------------------- ----------------------- -----------------------
+
+	Start
+	  |
+       Open Lib	------------------>|
+	  |			   |
+ 	  |		       Initialize
+	  |
+   Create emulation -------------->|
+       process			   |
+	  |			 Start
+	  |			   :
+   Send init msg ----------------->|
+	  |			   |
+	  |			 Setup
+	  |			   |
+	  |		    Prepare process
+	  |		       bootstrap
+	  |			   :
+    Send run msg ----------------->|
+	  :			   |
+	  :		    Emulate 68k code
+	  :		        (main)
+	  :			   |
+	  :		     CreateProcess()
+	  :		   called for 68k code
+	  :		        (main)
+	  :			   |
+	  :		    Prepare process
+	  :			bootstrap
+	  :			   |
+	  :		     Create process -------------->|
+	  :			   |			   |
+	  :			   |			 Start
+	  :			   |			   :
+	  :		    Send config msg -------------->|
+	  :			   :			   |
+	  :			   :			 Setup
+	  :			   :			   |
+	  :			   :<--------------- Send run msg
+	  :			   |			   :
+	  :		    Emulate 68k code		   :
+	  :		     (interleaved)		   :
+	  :			   |			   :
+	  :		  Syscall in 68k code		   :
+	  :		       (process)		   :
+	  :			   |			   :
+	  :		    Prepare syscall		   :
+	  :			   |			   :
+	  :		   Send syscall msg -------------->|
+	  :			   :			   |
+	  :			   :		   Do native syscall
+	  :			   :			   |
+	  :			   |<---------------- Send syscall
+	  :			   |		       return msg
+	  :		    Cleanup syscall		   :
+	  :			   |			   :
+	  :		    Emulate 68k code		   :
+	  :		     (interleaved)		   :
+	  :			   |			   :
+	 ---			  ---			  ---
+	 ---			  ---			  ---
+	  :			   |			   :
+	  :		     68k code exit		   :
+	  :		       (process)		   :
+	  :			   |			   :
+	  :		      Send exit msg -------------->|
+	  :			   |			   |
+	  :			   |			Cleanup
+	  :			   |			   |
+	  :			   |			 Exit
+	  :			   |
+	  :		    Emulate 68k code
+	  :		        (main)
+	  :			   |
+	  :		     68k code exit
+	  :			(main)
+	  :			   |
+	  |<----------------- Send exit msg
+	  |			   |
+   Wait on emulation		Cleanup
+	process			   |
+	  :			   |
+	  |<----------------- Send end msg
+	  |			   |
+       Cleanup	  		 Exit
+	  |
+	Exit
+
+
+
+Library calls to emumiga.library
+--------------------------------
+
+Run	- Loads and runs an Amiga 68k HUNK executable
+

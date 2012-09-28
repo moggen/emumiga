@@ -1,0 +1,16 @@
+
+
+0x000000 .- Zero-page [1000 B]
+         '-
+0x123456 .- struct ExecBase [322 B]
+0x123456 | .- struct Library [88 B]
+0x123456 | | .- struct Node [8 B]
+         | | '-
+         | '-
+0x123456 | .- struct List [16 B]
+         | '-
+         '-
+0x123456 ## (unused) [4344 B]
+0x123456 .- User allocated [344 B]
+         '-
+0x123456 ## (unused) [23214344 B]

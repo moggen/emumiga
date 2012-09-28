@@ -1,0 +1,12 @@
+AROS Concerns
+=============
+
+To implement direct object mapping for AROS host following considerations
+must be handled:
+
+Object mapping from two ways; both virtual from 68k space and real from
+native CPU space.
+Virtual 68k adresses should be a separate space from real addresses
+to guarantee compatibilty with >32 bit CPUs.
+Each mapping should have a reference count so entries can be cleaned up
+when they are no longer in use.
